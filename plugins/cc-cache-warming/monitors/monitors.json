@@ -1,0 +1,8 @@
+[
+  {
+    "name": "cc-cache-warming",
+    "command": "bash \"${CLAUDE_PLUGIN_ROOT}/scripts/cc-cache-warming-monitor.sh\" --session \"${CLAUDE_SESSION_ID}\"",
+    "description": "cc-cache-warming: keeps this session's prompt cache warm while you are away",
+    "when": "always"
+  }
+]

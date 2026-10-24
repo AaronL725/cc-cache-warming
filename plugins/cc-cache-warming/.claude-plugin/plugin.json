@@ -1,0 +1,20 @@
+{
+  "name": "cc-cache-warming",
+  "version": "4.1.0",
+  "description": "Keep the main Claude Code session's prompt cache warm for up to 6 hours after your last real task. A background Monitor pings the same session ~48 min after each cache touch, a prompt hook gates every ping (too late, not needed, disabled) and blocks tools during it, and every ping is verified from the transcript's cache_read/cache_creation tokens; misses, rewrites, 5m TTL, model switches and API/quota errors stop it.",
+  "author": {
+    "name": "AaronL725"
+  },
+  "homepage": "https://github.com/AaronL725/cc-cache-warming",
+  "repository": "https://github.com/AaronL725/cc-cache-warming",
+  "license": "MIT",
+  "keywords": [
+    "cache",
+    "prompt-cache",
+    "cache-warming",
+    "ttl",
+    "cost-optimization",
+    "hooks",
+    "monitor"
+  ]
+}

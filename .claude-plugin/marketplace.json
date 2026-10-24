@@ -1,0 +1,14 @@
+{
+  "name": "cc-cache-warming",
+  "owner": {
+    "name": "AaronL725"
+  },
+  "description": "Keep Claude Code's main-session prompt cache warm while you are away",
+  "plugins": [
+    {
+      "name": "cc-cache-warming",
+      "source": "./plugins/cc-cache-warming",
+      "description": "Keeps the main session's 1h prompt cache warm for up to 6 h after your last real task: Monitor pings in the same session, a prompt hook gates each ping and blocks its tools, and every ping is verified from transcript cache tokens. Stops on misses, rewrites, 5m TTL, model switches and API/quota errors."
+    }
+  ]
+}
