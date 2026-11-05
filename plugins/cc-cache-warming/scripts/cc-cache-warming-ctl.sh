@@ -94,7 +94,6 @@ status_one() {
   ccw_rdi main_verified; mv="$REPLY"; ccw_rdi ret_verified; rv="$REPLY"
   echo "pings        : $pings/$CCW_MAX_PINGS sent, $dl delivered, $blk blocked by the gate"
   echo "verified     : Ping Sent $pings | Cache Hit Verified $hits | Main Session Warm Verified $mv (+$rv on return)"
-  ccw_rdi compacts; [ "$REPLY" -gt 0 ] && echo "final step   : $CCW_COMPACT_COMMAND typed into the tmux pane (instead of the last ping)"
   ccw_rd last_result; [ -n "$REPLY" ] && echo "last ping    : $REPLY"
   ccw_rd last_return; [ -n "$REPLY" ] && echo "last return  : $REPLY"
   echo "log          : $SD/log"
@@ -103,7 +102,7 @@ status_one() {
 case "${1:-status}" in
   status)
     echo "cc-cache-warming  (state dir $CCW_STATE_DIR)"
-    echo "config       : interval=$(ccw_dur "$CCW_INTERVAL_SECONDS") ttl=$(ccw_dur "$CCW_TTL_SECONDS") window=$(ccw_dur "$CCW_WINDOW_SECONDS") max_pings=$CCW_MAX_PINGS tick=${CCW_TICK_SECONDS}s/${CCW_IDLE_TICK_SECONDS}s min_context=$CCW_MIN_CONTEXT_TOKENS final_compact=$(if [ "$CCW_FINAL_COMPACT" != 0 ] && [ -n "${TMUX_PANE:-}" ]; then echo tmux; elif [ "$CCW_FINAL_COMPACT" != 0 ]; then echo "on (needs tmux)"; else echo off; fi)"
+    echo "config       : interval=$(ccw_dur "$CCW_INTERVAL_SECONDS") ttl=$(ccw_dur "$CCW_TTL_SECONDS") window=$(ccw_dur "$CCW_WINDOW_SECONDS") max_pings=$CCW_MAX_PINGS tick=${CCW_TICK_SECONDS}s/${CCW_IDLE_TICK_SECONDS}s min_context=$CCW_MIN_CONTEXT_TOKENS"
     if [ "${2:-}" = "--all" ]; then
       for d in "$CCW_STATE_DIR"/sessions/*/; do
         [ -d "$d" ] || continue

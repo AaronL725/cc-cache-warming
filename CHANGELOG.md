@@ -2,30 +2,6 @@
 
 All notable changes to this project are documented here.
 
-## [4.2.0] — final step is `/compact`
-
-### Changed
-- The step that would be the last keep-warm ping (the one that carries the
-  cache past the 6 h deadline, or the 8th) now runs `/compact` on the session
-  instead of asking the model to reply `ok`. With the defaults: 6 pings, then
-  `/compact` at ~342 min.
-- Claude Code has no supported way to run a built-in command from a plugin, so
-  the monitor types it into its own tmux pane (`tmux send-keys`, `$TMUX_PANE`).
-  It is typed only when the prompt box is visible and empty; outside tmux, with
-  a draft, or on any doubt the step falls back to the ordinary ping
-  (`COMPACT_SKIPPED`).
-- The hook treats the typed `/compact` as no real turn: `PostCompact` ends its
-  pending marker (`COMPACT_DONE`) and a `Stop` right after it does not re-arm
-  the window. A missing `PostCompact` is logged as `COMPACT_UNCONFIRMED`.
-
-### Added
-- `CCW_FINAL_COMPACT` (default 1), `CCW_COMPACT_COMMAND` (`/compact`),
-  `CCW_COMPACT_CHECK_DRAFT` (1); `ctl status` shows the final step.
-
-### Tests
-- 161 checks (fake tmux: full lifecycle, draft, no tmux, switch off, 8-ping cap,
-  PostCompact/Stop handling, unconfirmed compact).
-
 ## [4.1.0] — bounded disk use, lower overhead, screen never kept on
 
 ### Changed

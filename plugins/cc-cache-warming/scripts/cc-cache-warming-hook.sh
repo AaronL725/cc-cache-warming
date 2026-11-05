@@ -16,8 +16,7 @@
 #   Stop              a ping turn's Stop only queues verification; it never
 #                     touches the 6 h window. A real turn's Stop re-arms it.
 #   StopFailure       API errors: quota/auth stop warming, transient ones retry.
-#   PostCompact /     (our own final /compact, typed by the monitor, only ends
-#                     its pending marker.) The cached prefix is gone or belongs to another model:
+#   PostCompact /     the cached prefix is gone or belongs to another model:
 #   PostModelSwitch   wait for the next real turn.
 #   SessionStart /    session bookkeeping; SessionEnd on exit stops this
 #   SessionEnd        process's monitor.
@@ -119,14 +118,6 @@ case "$ev" in
         block "monitor stopped (notification suppressed)"
         exit 0 ;;
     esac
-    # ---- the /compact the monitor typed as the final step is not a real turn
-    ccw_rd compact_pending
-    if [ -n "$REPLY" ]; then
-      case "$input" in
-        *'"prompt":"'"$CCW_COMPACT_COMMAND"'"'*) ccw_log COMPACT_PROMPT "$CCW_COMPACT_COMMAND reached the session"; exit 0 ;;
-      esac
-    fi
-    ccw_del compact_pending compact_done
     # ---- a real turn opens (typed prompt, background task result, ...)
     ccw_set turn "$now $pid"
     ;;
@@ -141,13 +132,7 @@ case "$ev" in
       ccw_js last_assistant_message "$input"
       ccw_log PING_TURN_DONE "reply: ${REPLY:0:40}"
     else
-      ccw_rd compact_pending; cp="$REPLY"
-      ccw_rdi compact_done
-      if [ -n "$cp" ] || { [ "$REPLY" -gt 0 ] && [ $((now - REPLY)) -lt 60 ]; }; then
-        ccw_log COMPACT_STOP "Stop of the typed $CCW_COMPACT_COMMAND; window stays done"
-      else
-        ccw_rearm "$now" "$pid"
-      fi
+      ccw_rearm "$now" "$pid"
     fi
     ;;
 
@@ -181,14 +166,7 @@ case "$ev" in
   PostCompact)
     ccw_del turn
     ccw_ping_end
-    ccw_rd compact_pending
-    if [ -n "$REPLY" ]; then
-      ccw_del compact_pending
-      ccw_set compact_done "$now"
-      ccw_log COMPACT_DONE "$CCW_COMPACT_COMMAND finished; the compacted context is cached by your next real turn"
-    else
-      ccw_rd state; [ "$REPLY" = "armed" ] && ccw_stop "context compacted; waiting for the next real turn to cache the new prefix"
-    fi
+    ccw_rd state; [ "$REPLY" = "armed" ] && ccw_stop "context compacted; waiting for the next real turn to cache the new prefix"
     ;;
 
   PostModelSwitch)

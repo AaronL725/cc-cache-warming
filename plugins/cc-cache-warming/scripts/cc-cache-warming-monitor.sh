@@ -220,50 +220,6 @@ verify_return() { # now
   fi
 }
 
-# ---- final step: /compact ---------------------------------------------------
-# The last keep-warm step runs /compact on the session instead of a "ok" ping.
-# Claude Code has no supported way to run a built-in command from a plugin, so
-# the command is typed into the pane the session runs in (tmux send-keys).
-# Without tmux, with a draft in the prompt box, or on any doubt the step falls
-# back to the normal ping. Nothing is typed unless the prompt box is verified
-# empty.
-compact_prompt_empty() { # pane -> 0 when the prompt box is visible and empty
-  local screen line rest found=0 draft=0
-  screen="$(tmux capture-pane -p -t "$1" 2>/dev/null)" || return 1
-  while IFS= read -r line; do
-    rest="${line#"${line%%[![:space:]]*}"}"
-    rest="${rest#│}"; rest="${rest#"${rest%%[![:space:]]*}"}"
-    case "$rest" in
-      "❯"*) rest="${rest#❯}" ;;
-      ">"*) rest="${rest#>}" ;;
-      *) continue ;;
-    esac
-    rest="${rest%"${rest##*[![:space:]]}"}"; rest="${rest%│}"
-    rest="${rest#"${rest%%[![:space:]]*}"}"; rest="${rest%"${rest##*[![:space:]]}"}"
-    found=1; draft=0; [ -n "$rest" ] && draft=1
-  done <<EOF_SCREEN
-$screen
-EOF_SCREEN
-  [ "$found" = 1 ] && [ "$draft" = 0 ]
-}
-
-# 0 = /compact was typed (window ends), 1 = not possible (REPLY says why)
-compact_now() { # now
-  local pane="${TMUX_PANE:-}"
-  REPLY=""
-  [ "$CCW_FINAL_COMPACT" != 0 ] || { REPLY="CCW_FINAL_COMPACT=0"; return 1; }
-  [ -n "$pane" ] || { REPLY="Claude Code is not running inside tmux"; return 1; }
-  command -v tmux >/dev/null 2>&1 || { REPLY="tmux not found"; return 1; }
-  tmux display-message -p -t "$pane" '#{pane_id}' >/dev/null 2>&1 || { REPLY="tmux pane $pane not found"; return 1; }
-  if [ "$CCW_COMPACT_CHECK_DRAFT" != 0 ] && ! compact_prompt_empty "$pane"; then
-    REPLY="prompt box not empty or not found (draft, menu or unknown screen)"; return 1
-  fi
-  tmux send-keys -t "$pane" -l "$CCW_COMPACT_COMMAND" >/dev/null 2>&1 || { REPLY="tmux send-keys failed"; return 1; }
-  sleep 0.5
-  tmux send-keys -t "$pane" Enter >/dev/null 2>&1 || { REPLY="tmux send-keys (Enter) failed"; return 1; }
-  return 0
-}
-
 # ---- one decision step ---------------------------------------------------
 emit_ping() { # now n touch deadline
   local nonce
@@ -293,11 +249,6 @@ tick() {
 
   verify_return "$now"
   verify_ping "$now"
-  ccw_rdi compact_pending
-  if [ "$REPLY" -gt 0 ] && [ $((now - REPLY)) -ge "$CCW_VERIFY_GRACE_SECONDS" ]; then
-    ccw_del compact_pending
-    ccw_log COMPACT_UNCONFIRMED "no PostCompact event $(ccw_dur $((now - REPLY))) after $CCW_COMPACT_COMMAND was typed"
-  fi
 
   ccw_rd state; [ "$REPLY" = "armed" ] || return 0
   ccw_rd_real; DEADLINE=$((REAL_AT + CCW_WINDOW_SECONDS))
@@ -377,19 +328,6 @@ tick() {
   ccw_rdi baseline
   if [ "$REPLY" -lt "$CCW_MIN_CONTEXT_TOKENS" ]; then
     ccw_stop "context $REPLY tokens < $CCW_MIN_CONTEXT_TOKENS; rebuilding it is cheaper than holding it"; return 0
-  fi
-  # the ping that would be the last one (it covers the cache to the deadline,
-  # or is the cap's last) becomes /compact instead
-  if [ "$CCW_FINAL_COMPACT" != 0 ] \
-     && { [ $((now + CCW_TTL_SECONDS)) -ge "$DEADLINE" ] || [ $((pings + 1)) -ge "$CCW_MAX_PINGS" ]; }; then
-    if compact_now; then
-      ccw_set compact_pending "$now"
-      ccw_inc compacts
-      ccw_end_window done "final step: $CCW_COMPACT_COMMAND typed into tmux pane $TMUX_PANE" COMPACT_SENT \
-        "$CCW_COMPACT_COMMAND typed into tmux pane $TMUX_PANE $(ccw_dur $((now - touch))) after the last cache touch, instead of ping #$((pings + 1)); window done"
-      return 0
-    fi
-    ccw_log COMPACT_SKIPPED "$REPLY; sending an ordinary final ping instead"
   fi
   emit_ping "$now" $((pings + 1)) "$touch" "$DEADLINE"
 }

@@ -4,7 +4,7 @@
 
 <p>
 <a href="LICENSE"><img alt="License: MIT" src="https://img.shields.io/badge/license-MIT-blue.svg"></a>
-<a href="test.sh"><img alt="tests: 161 passing" src="https://img.shields.io/badge/tests-161%20passing-brightgreen"></a>
+<a href="test.sh"><img alt="tests: 144 passing" src="https://img.shields.io/badge/tests-144%20passing-brightgreen"></a>
 <img alt="Claude Code plugin" src="https://img.shields.io/badge/Claude%20Code-plugin-6E56CF">
 <img alt="pure shell" src="https://img.shields.io/badge/pure-bash%203.2%2B-555">
 </p>
@@ -47,26 +47,9 @@ you walk away
 you come back: the first request of your turn is checked too ─► Main Session Warm Verified (return)
 ```
 
-With the defaults a full break costs **6 pings** (at about 48, 97, 146, 195,
-244 and 293 minutes) and a **final `/compact`** at about 342 minutes. That slot
-would be the last ping, the one that keeps the cache alive past the 6 hour mark,
-so it compacts the session instead of replying `ok` (see below). Without tmux
-the 7th step is an ordinary ping. The cap of 8 is a hard ceiling.
-
-### The final step: `/compact`
-
-When you come back after a full break you usually continue a very long
-conversation. So the step that would be the last ping runs the built-in
-`/compact` on the session instead. It happens while the main cache is still
-warm, so the summarisation request reads the cached prefix.
-
-Claude Code has no supported way for a plugin (or the model) to run a built-in
-command, so the monitor **types `/compact` + Enter into the tmux pane** the
-session runs in (`tmux send-keys`). This needs Claude Code to run **inside
-tmux**. It is typed only if the prompt box is visible and empty; with a draft
-in it, outside tmux, or on any doubt, the step falls back to the ordinary `ok`
-ping (`COMPACT_SKIPPED` in the log). The compaction ends the window; the next
-real turn starts a new one. `CCW_FINAL_COMPACT=0` turns it off.
+With the defaults a full break costs **7 pings** (at about 48, 97, 146, 195,
+244, 293 and 342 minutes). The last ping keeps the cache alive past the 6 hour
+mark, so no 8th ping is needed. The cap of 8 is a hard ceiling.
 
 ### Telling real turns from pings
 
@@ -228,9 +211,6 @@ which wins over the defaults. The monitor re-reads the file every tick.
 | `CCW_VERIFY_GRACE_SECONDS` | `180` | wait this long for the transcript to show a ping's usage |
 | `CCW_RETRY_SECONDS` / `CCW_MAX_ERRORS` | `120` / `2` | transient API error retry |
 | `CCW_TAIL_BYTES` | `1048576` | transcript bytes read per verification (never the whole file) |
-| `CCW_FINAL_COMPACT` | `1` | the last keep-warm step types `/compact` into the session's tmux pane instead of pinging; `0` = always ping |
-| `CCW_COMPACT_COMMAND` | `/compact` | what is typed (e.g. `/compact keep the open TODOs`) |
-| `CCW_COMPACT_CHECK_DRAFT` | `1` | type it only if the prompt box is empty; `0` = type regardless (can append to a draft) |
 | `CCW_CAFFEINATE` | `1` | macOS while armed: `1` = no system sleep on AC power only, `2` = also on battery, `0` = off. The display is never kept on |
 | `CCW_LOG_MAX_BYTES` | `262144` | a session log over this is cut to its newest half |
 | `CCW_PING_TEXT` | see below | text after the `[ccw:<nonce>]` tag |
@@ -311,7 +291,7 @@ Everything on disk has a ceiling:
 ## Tests
 
 ```bash
-./test.sh                       # 161 checks, ~1.5 min, no Claude needed
+./test.sh                       # 144 checks, ~1.5 min, no Claude needed
 CCW_TEST_SHELL=/opt/homebrew/bin/bash ./test.sh
 ```
 
@@ -347,9 +327,6 @@ An end-to-end run of this plugin (Haiku, compressed timings) showed:
 
 ## Limitations
 
-* The final `/compact` needs Claude Code inside **tmux**. Its empty-prompt check
-  reads the pane text, so a greyed-out placeholder or prompt suggestion in the
-  box looks like a draft and the step falls back to an ordinary ping.
 * Each ping adds two short entries (the notification and `ok`) to the
   conversation. A thinking model may spend a few dozen thinking tokens on it.
 * Claude Code may generate its own away "recap" after several notifications.
