@@ -4,7 +4,7 @@
 
 <p>
 <a href="LICENSE"><img alt="License: MIT" src="https://img.shields.io/badge/license-MIT-blue.svg"></a>
-<a href="test.sh"><img alt="tests: 144 passing" src="https://img.shields.io/badge/tests-144%20passing-brightgreen"></a>
+<a href="test.sh"><img alt="tests: 161 passing" src="https://img.shields.io/badge/tests-161%20passing-brightgreen"></a>
 <img alt="Claude Code plugin" src="https://img.shields.io/badge/Claude%20Code-plugin-6E56CF">
 <img alt="pure shell" src="https://img.shields.io/badge/pure-bash%203.2%2B-555">
 </p>
@@ -44,8 +44,20 @@ Claude 干活 …      ── Stop ─────────────► �
 你回来：你这一回合的第一个请求同样会被检查 ─► Main Session Warm Verified（回归）
 ```
 
-默认参数下，一段完整的离开期共 **7 次 ping**（约第 48、97、146、195、244、293、342 分钟）。
-最后一次 ping 已经能让缓存撑过第 6 小时，所以不会再发第 8 次。8 次是硬上限。
+默认参数下，一段完整的离开期共 **6 次 ping**（约第 48、97、146、195、244、293 分钟），
+再加约第 342 分钟的**最后一步 `/compact`**。这一步本来是最后一次 ping（让缓存撑过第 6 小时的那次），
+现在改为对会话执行 `/compact`，不再让模型回复 `ok`（见下）。不在 tmux 里时，第 7 步仍是普通 ping。8 次是硬上限。
+
+### 最后一步：`/compact`
+
+整段离开期结束后你回来，通常要接着一个很长的对话。所以原本的最后一次 ping 改为对会话执行内置的
+`/compact`。此时主缓存仍然有效，压缩请求会直接读缓存前缀。
+
+Claude Code 没有受支持的方式让插件（或模型）执行内置命令，所以 Monitor 会向会话所在的
+**tmux pane 输入 `/compact` 并回车**（`tmux send-keys`）。因此要求 Claude Code **运行在 tmux 里**。
+只有在输入框可见且为空时才会输入；输入框里有草稿、不在 tmux 里，或任何拿不准的情况，都会回退成普通的
+`ok` ping（日志里记为 `COMPACT_SKIPPED`）。压缩后窗口结束，下一次真实回合重新开始新窗口。
+`CCW_FINAL_COMPACT=0` 可关闭。
 
 ### 怎么区分真实回合和 ping
 
@@ -175,6 +187,9 @@ Bedrock/Vertex/Foundry 上运行，设置了 `DISABLE_TELEMETRY` /
 | `CCW_VERIFY_GRACE_SECONDS` | `180` | 最多等这么久，让 transcript 写出 ping 的 usage |
 | `CCW_RETRY_SECONDS` / `CCW_MAX_ERRORS` | `120` / `2` | 临时性 API 错误的重试 |
 | `CCW_TAIL_BYTES` | `1048576` | 每次验证读取的 transcript 字节数（从不读整个文件） |
+| `CCW_FINAL_COMPACT` | `1` | 最后一步保温改为向会话所在的 tmux pane 输入 `/compact`，而不是 ping；`0` = 始终 ping |
+| `CCW_COMPACT_COMMAND` | `/compact` | 实际输入的内容（例如 `/compact 保留未完成的 TODO`） |
+| `CCW_COMPACT_CHECK_DRAFT` | `1` | 仅在输入框为空时输入；`0` = 不检查直接输入（可能追加到草稿后面） |
 | `CCW_CAFFEINATE` | `1` | macOS 窗口生效期间：`1` = 仅接电源时阻止系统休眠，`2` = 电池下也阻止，`0` = 关闭；任何档位都不阻止熄屏 |
 | `CCW_LOG_MAX_BYTES` | `262144` | Session 日志超过该大小时截掉较旧的一半 |
 | `CCW_PING_TEXT` | 见下 | `[ccw:<nonce>]` 标签后面的文字 |
@@ -247,14 +262,14 @@ Bedrock/Vertex/Foundry 上运行，设置了 `DISABLE_TELEMETRY` /
 ## 测试
 
 ```bash
-./test.sh                       # 144 项检查，约 1.5 分钟，不需要 Claude
+./test.sh                       # 161 项检查，约 1.5 分钟，不需要 Claude
 CCW_TEST_SHELL=/opt/homebrew/bin/bash ./test.sh
 ```
 
 用模拟时钟（`CCW_NOW`）和按 Claude Code 真实记录格式构造的 transcript，驱动钩子和
 `monitor --once`，覆盖以下场景：
 
-- **完整 6 小时生命周期：** 7 次 ping 及其时刻、截止时间不变、7 次命中、6 次主 Session 验证、自动停止，以及回归检查；
+- **完整 6 小时生命周期：** 7 次 ping 及其时刻、截止时间不变、7 次命中、6 次主 Session 验证；以及 tmux 最后一步 `/compact`（用假的 tmux 验证：6 次 ping + `/compact`、草稿时回退、不在 tmux 时回退）、自动停止，以及回归检查；
 - **调度：** 8 次上限、新真实任务重新计时、睡眠后不集中补发；
 - **闸门：** 迟到和过期的 ping 被拦截、工具被拒、钩子不输出任何内容；
 - **缓存异常：** 未命中并按版本暂停、部分命中只容忍一次、5m 档、模型切换、压缩、小上下文、由其他模型回复；
@@ -276,6 +291,8 @@ CCW_TEST_SHELL=/opt/homebrew/bin/bash ./test.sh
 
 ## 已知限制
 
+* 最后一步 `/compact` 需要 Claude Code 运行在 **tmux** 里。判断输入框是否为空是读取 pane 文本，
+  所以输入框里灰色的占位符或提示建议会被当成草稿，此时回退成普通 ping。
 * 每次 ping 会在对话里留下两条很短的记录（通知和 `ok`）；带思考的模型可能为此花几十个思考 token。
 * Claude Code 可能在收到多条通知后自行生成离开期间的"recap"，那次调用来自 Claude Code，不是插件发起的。
 * 输入框里留着草稿会挡住通知，这时 ping 会被拒绝或跳过，但绝不会迟发。

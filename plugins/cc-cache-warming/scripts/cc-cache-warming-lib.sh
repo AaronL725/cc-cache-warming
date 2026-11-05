@@ -38,7 +38,7 @@ CCW_NAME="cc-cache-warming"
 # ping apart from any other prompt or notification.
 CCW_TAG="[ccw:"
 # Per-window counters, reset together whenever a real turn re-arms.
-CCW_COUNTERS="pings delivered hits main_verified blocked partials errors"
+CCW_COUNTERS="pings delivered hits main_verified blocked partials errors compacts"
 # Claude Code version ("2.1.308 (Claude Code)" -> 2.1.308), for the bench.
 CCW__VER="${CLAUDE_CODE_VERSION:-unknown}"; CCW__VER="${CCW__VER%% *}"
 # BSD (macOS) or GNU date/stat, decided once without spawning anything.
@@ -130,6 +130,8 @@ ccw_params() {
   ccw_int CCW_MAX_ERRORS 2                  # consecutive transient errors before stopping
   ccw_int CCW_TAIL_BYTES 1048576            # max transcript bytes read per verification
   ccw_int CCW_LOG_MAX_BYTES 262144          # a session log is cut in half above this
+  ccw_int CCW_FINAL_COMPACT 1               # last keep-warm step: type /compact into the tmux pane instead of pinging (0 = off)
+  ccw_int CCW_COMPACT_CHECK_DRAFT 1         # only type it when the prompt box is empty (0 = type regardless)
   ccw_int CCW_CAFFEINATE 1                  # macOS while armed: 1 = no system sleep on AC (display still sleeps), 2 = also on battery, 0 = off
   [ "$CCW_TICK_SECONDS" -ge 1 ] || CCW_TICK_SECONDS=60
   [ "$CCW_IDLE_TICK_SECONDS" -ge "$CCW_TICK_SECONDS" ] || CCW_IDLE_TICK_SECONDS="$CCW_TICK_SECONDS"
@@ -142,6 +144,7 @@ ccw_params() {
     CCW_INTERVAL_SECONDS=$((CCW_TTL_SECONDS - CCW_SAFETY_SECONDS - CCW_TICK_SECONDS))
     [ "$CCW_INTERVAL_SECONDS" -ge 1 ] || CCW_INTERVAL_SECONDS=1
   fi
+  CCW_COMPACT_COMMAND="${CCW_COMPACT_COMMAND:-/compact}"
   CCW_PING_TEXT="${CCW_PING_TEXT:-Automated prompt-cache keep-warm ping (cc-cache-warming). Not a task: do not use tools or resume earlier work. Reply with only: ok}"
 }
 
@@ -254,7 +257,7 @@ ccw_rearm() { # epoch prompt_id
   ccw_set touch_at "$at"
   ccw_set state armed
   ccw_ping_end
-  ccw_del turn reason pending pending_at retry_at verify_pid baseline last_prompt
+  ccw_del turn reason pending pending_at retry_at verify_pid baseline last_prompt compact_pending compact_done
   for k in $CCW_COUNTERS; do ccw_set "$k" 0; done
   # log only transitions: an actively used session (armed, no pings yet)
   # would otherwise add a line per turn
