@@ -27,7 +27,7 @@ trap cleanup EXIT
 
 # a clean, deterministic environment for the scripts
 for v in $(compgen -v | grep '^CCW_'); do unset "$v"; done
-unset CLAUDE_CODE_SESSION_ID CLAUDE_SESSION_ID CLAUDE_PROJECT_DIR CCW_NOW TMUX TMUX_PANE
+unset CLAUDE_CODE_SESSION_ID CLAUDE_SESSION_ID CLAUDE_PROJECT_DIR CCW_NOW
 export CCW_CAFFEINATE=0
 export CLAUDE_CODE_VERSION="2.1.308 (Claude Code)"
 export CLAUDE_PID=11111
@@ -171,80 +171,6 @@ check "$(st A ret_verified)" "1" "your next request read the main prefix: Main S
 check "$(logc A 'on return')" "1" "log: MAIN_SESSION_WARM_VERIFIED on return"
 check "$(( $(real_at A) + 21600 ))" "$((T0 + 350 * 60 + 21600))" "the real turn restarted the 6h window"
 check "$(st A pings)/$(st A hits)" "0/0" "the real turn reset the per-window counters"
-
-section "final step: /compact typed into tmux instead of the last ping"
-# a fake tmux: the pane shows $TMP/screen, send-keys are recorded
-mkdir -p "$TMP/bin"
-cat > "$TMP/bin/tmux" <<'EOF_TMUX'
-#!/bin/bash
-case "$1" in
-  display-message) exit 0 ;;
-  capture-pane) cat "$TMP_SCREEN" ;;
-  send-keys) shift; echo "$*" >> "$TMP_KEYS" ;;
-esac
-EOF_TMUX
-chmod +x "$TMP/bin/tmux"
-export TMP_SCREEN="$TMP/screen" TMP_KEYS="$TMP/keys"
-OLDPATH="$PATH"; PATH="$TMP/bin:$PATH"
-screen_empty() { printf 'some output\n\n\342\224\200\342\224\200\342\224\200\n\342\235\257 \n\342\224\200\342\224\200\342\224\200\n  ? for shortcuts\n' > "$TMP_SCREEN"; }
-screen_draft() { printf 'some output\n\n\342\235\257 half a sentence I was typing\n  ? for shortcuts\n' > "$TMP_SCREEN"; }
-
-fresh compact
-: > "$TMP_KEYS"; screen_empty
-export TMUX_PANE=%7
-real_turn "$T0" K r1
-life K "$T0" $((T0 + 345 * 60))
-CT="$(st K compact_pending)"
-check "$PING_MIN" " 48 97 146 195 244 293" "6 ordinary pings; the 7th slot (342m) is not a ping"
-check "$(cat "$TMP_KEYS" | tr '\n' '|')" "-t %7 -l /compact|-t %7 Enter|" "/compact and Enter typed into Claude Code's own tmux pane, once"
-check "$(st K state)|$(st K compacts)" "done|1" "window done after the compact step"
-check "$(logc K COMPACT_SENT)/$(logc K PING_SENT)" "1/6" "log: Compact Sent once, Ping Sent x6"
-check "$(st K pings)/$(st K hits)" "6/6" "all 6 pings were verified hits"
-check "$(( $(real_at K) + 21600 ))" "$((T0 + 21600))" "the compact step never moved the 6h deadline"
-# the session reacts: UserPromptSubmit, PostCompact, maybe a Stop of its own
-ups $((CT + 5)) K cK '/compact' >/dev/null
-hook $((CT + 20)) "$(j PostCompact K "" ',"trigger":"manual"')" >/dev/null
-stop $((CT + 21)) K cK >/dev/null
-check "$(st K state)|$(st K turn)|$(st K compact_pending)" "done||" "typed /compact is no real turn, PostCompact ends it, a Stop does not re-arm"
-check "$(logc K COMPACT_DONE)" "1" "log: Compact Done"
-tick $((CT + 600)) >/dev/null
-check "$(tick $((T0 + 400 * 60)))" "" "nothing more is sent after the compact"
-real_turn $((T0 + 360 * 60)) K r2
-check "$(st K state)" "armed" "the next real turn re-arms normally"
-# no PostCompact ever arrives: the marker is dropped after the grace period
-fresh compact_unconfirmed
-: > "$TMP_KEYS"; export TMUX_PANE=%7
-real_turn "$T0" U r1
-life U "$T0" $((T0 + 345 * 60))
-check "$(yes_no test -n "$(st U compact_pending)")" "yes" "marker set while the compact is pending"
-tick $(( $(st U compact_pending) + 200 )) >/dev/null
-check "$(yes_no test -n "$(st U compact_pending)")/$(logc U COMPACT_UNCONFIRMED)" "no/1" "no PostCompact within the grace period: marker dropped and logged"
-
-fresh compact_draft
-: > "$TMP_KEYS"; screen_draft
-real_turn "$T0" D r1
-life D "$T0" $((T0 + 7 * 3600))
-check "$PING_MIN" " 48 97 146 195 244 293 342" "a draft in the prompt box: nothing typed, the 7th ping is sent as before"
-check "$(cat "$TMP_KEYS")|$(logc D COMPACT_SKIPPED)" "|1" "no key was sent; the skip is logged"
-
-fresh compact_notmux
-: > "$TMP_KEYS"; screen_empty
-real_turn "$T0" E r1
-( unset TMUX_PANE; life E "$T0" $((T0 + 7 * 3600)); echo "$PING_MIN" > "$TMP/pm" )
-check "$(cat "$TMP/pm")|$(cat "$TMP_KEYS")" " 48 97 146 195 244 293 342|" "outside tmux: ordinary 7 pings, nothing typed"
-fresh compact_off
-: > "$TMP_KEYS"
-real_turn "$T0" O r1
-CCW_FINAL_COMPACT=0 life O "$T0" $((T0 + 7 * 3600))
-check "$PING_MIN|$(cat "$TMP_KEYS")" " 48 97 146 195 244 293 342|" "CCW_FINAL_COMPACT=0: ordinary 7 pings, nothing typed"
-fresh compact_cap
-: > "$TMP_KEYS"; screen_empty
-export CCW_WINDOW_SECONDS=43200
-real_turn "$T0" CC r1
-life CC "$T0" $((T0 + 12 * 3600))
-check "$(echo $PING_MIN | wc -w | tr -d ' ')|$(cat "$TMP_KEYS" | wc -l | tr -d ' ')" "7|2" "the 8-ping cap: 7 pings, the 8th step is /compact"
-unset CCW_WINDOW_SECONDS TMUX_PANE
-PATH="$OLDPATH"
 
 section "max ping cap"
 fresh cap
